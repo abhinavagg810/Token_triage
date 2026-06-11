@@ -36,14 +36,31 @@ npx tokentriage analyze ./logs.jsonl
 npx tokentriage analyze ./exports/ --out report.html
 ```
 
-Requires Node 18+. No install, no account, no backend.
+Requires Node 18+ (Node 22.5+ for `--db`). No install, no account, no backend.
+
+## Ask the auditor (agent service)
+
+The optional `agent/` service answers spend questions and investigates anomalies over a SQLite export of your audit, using LangGraph and your own Anthropic key:
+
+```bash
+# 1. export the audit database (from core/, or via npx)
+npx tokentriage analyze ./logs.jsonl --db tokentriage.db
+
+# 2. run the agents
+cd agent && pip install -e .
+export ANTHROPIC_API_KEY=sk-ant-...
+python -m agent.cli --db ../tokentriage.db ask "why was day 12 expensive?"
+python -m agent.cli --db ../tokentriage.db investigate --date 2026-05-12
+```
+
+`investigate` runs an explicit LangGraph state machine (detect anomaly → hypothesize → gather evidence with capped tool calls → verify → incident report) with resumable SQLite checkpoints. The agent logs its **own** token usage to the `agent_runs` table — TokenTriage audits itself. The database schema is documented in [`docs/db-schema.md`](docs/db-schema.md).
 
 ## Privacy
 
 TokenTriage is **fully local**:
 
-- **No network calls.** Analysis runs entirely on your machine. The single exception is the opt-in `--narrate` flag, which sends *aggregated findings only* (never raw logs, never prompt content) to your own API key.
-- **No prompt bodies are ever persisted.** If an export contains prompt/response bodies, TokenTriage computes SHA-256 hashes and lengths **in memory** and discards the bodies. They never reach disk, cache, or the report.
+- **No network calls.** Analysis runs entirely on your machine. The exceptions are opt-in and use your own key: the `--narrate` flag (sends *aggregated findings only* — never raw logs, never prompt content) and the agent service's LLM calls.
+- **No prompt bodies are ever persisted.** If an export contains prompt/response bodies, TokenTriage computes SHA-256 hashes and lengths **in memory** and discards the bodies. They never reach disk, cache, the report, or the SQLite export.
 - **No telemetry.** None.
 
 ## Supported input formats
@@ -91,36 +108,47 @@ Only `model`, `input_tokens`, `output_tokens`, and `timestamp` are required — 
 | **Model overkill** | Classification-shaped calls (tiny outputs) on frontier models | Medium, "up to" |
 | **Verbose output** | Uncapped calls (no `max_tokens`) producing outlier-long outputs | Low |
 
-A **claimed-token ledger** guarantees no token is counted by two analyzers, so the waste figures add up honestly. Every threshold and formula is documented in [`src/analyzers/THRESHOLDS.md`](src/analyzers/THRESHOLDS.md) — if one looks wrong for your workload, open a PR.
+A **claimed-token ledger** guarantees no token is counted by two analyzers, so the waste figures add up honestly. Every threshold and formula is documented in [`core/src/analyzers/THRESHOLDS.md`](core/src/analyzers/THRESHOLDS.md) — if one looks wrong for your workload, open a PR.
 
 ## CLI reference
 
 | Command | Behavior |
 |---|---|
-| `tokentriage analyze <path> [--out report.html] [--json] [--narrate] [--no-session-inference] [--period 30d]` | Main flow |
+| `tokentriage analyze <path> [--out report.html] [--json] [--narrate] [--no-session-inference] [--period 30d] [--db audit.db]` | Main flow |
 | `tokentriage demo` | Runs on the bundled synthetic 30-day dataset |
 | `tokentriage formats` | Supported input formats + canonical schema |
 | `tokentriage pricing` | Active pricing table + override path |
 
-`--json` emits machine-readable findings for CI (e.g. fail a pipeline if waste > 30%). `--narrate` adds an LLM-written executive summary to the report using your own key in `TOKENTRIAGE_LLM_KEY` — the only network call in the tool, off by default.
+`--json` emits machine-readable findings for CI (e.g. fail a pipeline if waste > 30%). `--narrate` adds an LLM-written executive summary to the report using your own key in `TOKENTRIAGE_LLM_KEY` — the only network call in the core tool, off by default. `--db` exports the normalized analysis to SQLite for the agent service ([schema](docs/db-schema.md)).
 
 ## Pricing data
 
-Model prices ship in [`pricing.json`](pricing.json) with a `last_verified` date per entry (shown in the report footer). **Provider pricing changes frequently — verify figures against the provider pricing pages before relying on the dollar amounts.** Override or extend (e.g. negotiated rates, missing models) via `~/.tokentriage/pricing.override.json`; the override wins on conflict.
+Model prices ship in [`core/pricing.json`](core/pricing.json) with a `last_verified` field per entry (shown in the report footer). **The bundled figures are currently `UNVERIFIED` placeholders** — the report and terminal flag any model priced from a placeholder. Verify against the provider pricing pages, or set your real rates (e.g. negotiated ones) in `~/.tokentriage/pricing.override.json`; the override wins on conflict.
 
 All savings figures are **estimates**, deliberately conservative: p75 baselines, "up to" labels on heuristic findings, cache-write overhead subtracted from caching savings.
 
 ## Development
 
 ```bash
+cd core
 npm install
 npm test                  # vitest, per-analyzer fixture tests
 npm run dev -- demo       # run the CLI from source
 npm run generate-sample   # regenerate samples/sample-logs.jsonl
 npm run build
+
+cd ../agent
+pip install -e ".[dev]"
+ruff check agent tests && pytest
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) — pricing updates and new analyzers are the friendliest entry points.
+
+## Dependencies (and why)
+
+Core (runtime): **commander** (CLI parsing), **zod** (canonical schema validation). That's the whole list — the HTML report is hand-rolled inline CSS/JS/SVG, hashing uses `node:crypto`, and the SQLite export uses the built-in `node:sqlite`.
+
+Agent: **langchain / langgraph / langchain-anthropic / langgraph-checkpoint-sqlite**, pinned exactly in [`agent/pyproject.toml`](agent/pyproject.toml). LangChain is used only in `agent/`.
 
 ## License
 

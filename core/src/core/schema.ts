@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Canonical record schema (PRD §5.2). Every input format is normalized to this.
  *
@@ -74,71 +76,76 @@ export function parseTimestamp(value: unknown): { iso: string; ts: number } {
   return { iso: "", ts: NaN };
 }
 
-function asNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() !== "") {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
+/** Accepts numbers or numeric strings (CSV-sourced exports coerce cleanly). */
+const numeric = z
+  .union([z.number(), z.string().trim().min(1)])
+  .transform((v) => Number(v))
+  .refine((n) => Number.isFinite(n), { message: "not a finite number" });
+
+const nullableString = z
+  .string()
+  .nullish()
+  .transform((s) => (s ? s : null));
+
+/**
+ * zod validator for the canonical input schema (PRD §5.2). Field order here
+ * determines which "missing field" is reported first for W-201.
+ */
+export const canonicalInputSchema = z.object({
+  model: z.string().min(1),
+  input_tokens: numeric,
+  output_tokens: numeric,
+  timestamp: z.union([z.string().min(1), z.number()]),
+  id: z.string().optional(),
+  provider: z.string().optional(),
+  cache_read_tokens: numeric.optional(),
+  cache_write_tokens: numeric.optional(),
+  status: numeric.optional(),
+  latency_ms: numeric.optional(),
+  session_id: nullableString,
+  system_prompt_hash: nullableString,
+  full_prompt_hash: nullableString,
+  max_tokens_set: z.boolean().optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
 
 /**
  * Map a raw object that already follows (or approximates) the canonical
- * schema into a CanonicalRecord. Returns the missing required field name on
- * failure so ingest can report W-201's "top missing fields".
+ * schema into a CanonicalRecord. Returns the missing/invalid required field
+ * name on failure so ingest can report W-201's "top missing fields".
  */
 export function toCanonical(
   raw: Record<string, unknown>,
   index: number
 ): { record: CanonicalRecord } | { missingField: string } {
-  const model = typeof raw.model === "string" && raw.model !== "" ? raw.model : null;
-  if (!model) return { missingField: "model" };
-
-  const input = asNumber(raw.input_tokens);
-  if (input === null) return { missingField: "input_tokens" };
-  const output = asNumber(raw.output_tokens);
-  if (output === null) return { missingField: "output_tokens" };
-
-  if (raw.timestamp === undefined || raw.timestamp === null) {
-    return { missingField: "timestamp" };
+  const parsed = canonicalInputSchema.safeParse(raw);
+  if (!parsed.success) {
+    const field = parsed.error.issues[0]?.path[0];
+    return { missingField: typeof field === "string" ? field : "(invalid record)" };
   }
-  const { iso, ts } = parseTimestamp(raw.timestamp);
-
-  const provider =
-    typeof raw.provider === "string" && raw.provider !== ""
-      ? raw.provider.toLowerCase()
-      : inferProvider(model);
+  const v = parsed.data;
+  const { iso, ts } = parseTimestamp(v.timestamp);
 
   return {
     record: {
-      id: typeof raw.id === "string" ? raw.id : `rec_${index}`,
+      id: v.id ?? `rec_${index}`,
       timestamp: iso,
       ts,
-      provider,
-      model,
-      input_tokens: input,
-      output_tokens: output,
-      cache_read_tokens: asNumber(raw.cache_read_tokens) ?? 0,
-      cache_write_tokens: asNumber(raw.cache_write_tokens) ?? 0,
-      status: asNumber(raw.status) ?? 200,
-      latency_ms: asNumber(raw.latency_ms) ?? 0,
-      session_id: typeof raw.session_id === "string" && raw.session_id !== "" ? raw.session_id : null,
-      system_prompt_hash:
-        typeof raw.system_prompt_hash === "string" && raw.system_prompt_hash !== ""
-          ? raw.system_prompt_hash
-          : null,
-      full_prompt_hash:
-        typeof raw.full_prompt_hash === "string" && raw.full_prompt_hash !== ""
-          ? raw.full_prompt_hash
-          : null,
+      provider: v.provider ? v.provider.toLowerCase() : inferProvider(v.model),
+      model: v.model,
+      input_tokens: v.input_tokens,
+      output_tokens: v.output_tokens,
+      cache_read_tokens: v.cache_read_tokens ?? 0,
+      cache_write_tokens: v.cache_write_tokens ?? 0,
+      status: v.status ?? 200,
+      latency_ms: v.latency_ms ?? 0,
+      session_id: v.session_id,
+      system_prompt_hash: v.system_prompt_hash,
+      full_prompt_hash: v.full_prompt_hash,
       // Conservative default: unknown means "assume the caller set a cap" so
       // the verbose-output analyzer doesn't fire on missing data.
-      max_tokens_set: typeof raw.max_tokens_set === "boolean" ? raw.max_tokens_set : true,
-      metadata:
-        raw.metadata && typeof raw.metadata === "object"
-          ? (raw.metadata as Record<string, unknown>)
-          : {},
+      max_tokens_set: v.max_tokens_set ?? true,
+      metadata: v.metadata ?? {},
     },
   };
 }

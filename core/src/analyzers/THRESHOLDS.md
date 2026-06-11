@@ -96,3 +96,23 @@ as the baseline keeps the estimate conservative.
   **< 30 minutes** are grouped into one inferred session.
 - Known limitation: parallel sessions with identical system prompts may merge.
   The report footnote discloses when inference was used.
+
+---
+
+## Worked example (PRD §12.2) — A1 cache miss
+
+Observed: system prompt prefix `a3f9c2…` (~2,940 tokens, estimated as the
+stable minimum input across the group), sent in 14,202 calls on
+`claude-sonnet-4-5` with `cache_read_tokens = 0` on all of them.
+Pricing: input $3.00/MTok, cache read $0.30/MTok, cache write $3.75/MTok.
+
+| Step | Math | Result |
+|---|---|---|
+| Tokens re-sent uncached | (14,202 − 1) × 2,940 tokens | 41.75 MTok |
+| Cost as paid (full input price) | 41.75 MTok × $3.00/MTok | $125.26 |
+| Cost if cached (reads) | 41.75 MTok × $0.30/MTok | $12.53 |
+| Cache-write overhead (re-write every 100 calls, 5-min TTL) | 142 × 2,940 × $3.75/MTok | $1.57 |
+| **Estimated waste** | $125.26 − $12.53 − $1.57 | **≈ $111 over 30 days** |
+
+This example is encoded as a unit test (`core/test/cache-miss.test.ts`)
+asserting the analyzer reproduces ~$111 on that fixture.

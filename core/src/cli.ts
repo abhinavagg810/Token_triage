@@ -25,6 +25,7 @@ interface AnalyzeFlags {
   narrate?: boolean;
   sessionInference: boolean;
   period?: string;
+  db?: string;
 }
 
 async function runAnalyze(inputPath: string, flags: AnalyzeFlags): Promise<void> {
@@ -41,7 +42,7 @@ async function runAnalyze(inputPath: string, flags: AnalyzeFlags): Promise<void>
 
   let ingest;
   try {
-    ingest = ingestPath(inputPath);
+    ingest = await ingestPath(inputPath);
   } catch (err) {
     if (err instanceof IngestError) {
       console.error(`${err.code}: ${err.message}`);
@@ -56,6 +57,15 @@ async function runAnalyze(inputPath: string, flags: AnalyzeFlags): Promise<void>
     sessionInference: flags.sessionInference,
     periodDays,
   });
+
+  if (flags.db) {
+    const { exportDb } = await import("./report/db.js");
+    const dbPath = path.resolve(flags.db);
+    const counts = await exportDb(result, pricing, dbPath);
+    console.error(
+      `SQLite export: ${dbPath} (${counts.requests.toLocaleString()} requests, ${counts.sessions.toLocaleString()} sessions, ${counts.findings} findings, ${counts.daily_spend} daily rows)`
+    );
+  }
 
   if (flags.json) {
     console.log(renderJson(result));
@@ -87,6 +97,7 @@ program
   .option("--narrate", "embed an LLM-written executive summary (uses TOKENTRIAGE_LLM_KEY; the only network call)")
   .option("--no-session-inference", "disable heuristic session reconstruction")
   .option("--period <window>", "restrict analysis to the most recent window, e.g. 30d")
+  .option("--db <path>", "also export records, sessions and findings to a SQLite file (see docs/db-schema.md)")
   .action(async (inputPath: string, flags: AnalyzeFlags) => {
     await runAnalyze(inputPath, flags);
   });
@@ -96,7 +107,8 @@ program
   .description("Run TokenTriage on the bundled 30-day sample dataset (works offline)")
   .option("--out <file>", "HTML report output path", "tokentriage-report.html")
   .option("--json", "emit machine-readable findings to stdout instead of HTML")
-  .action(async (flags: { out: string; json?: boolean }) => {
+  .option("--db <path>", "also export the sample analysis to a SQLite file")
+  .action(async (flags: { out: string; json?: boolean; db?: string }) => {
     const candidates = [
       path.resolve(__dirname, "..", "samples", "sample-logs.jsonl"),
       path.resolve(__dirname, "..", "..", "samples", "sample-logs.jsonl"),
@@ -107,7 +119,7 @@ program
       process.exitCode = 1;
       return;
     }
-    await runAnalyze(sample, { out: flags.out, json: flags.json, sessionInference: true });
+    await runAnalyze(sample, { out: flags.out, json: flags.json, db: flags.db, sessionInference: true });
   });
 
 program

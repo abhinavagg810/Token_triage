@@ -1,0 +1,37 @@
+[project]
+name = "tokentriage-agent"
+version = "0.1.0"
+description = "TokenTriage investigation + spend Q&A agents (LangGraph) over the SQLite export of the core CLI."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+# LangChain 1.x / LangGraph only — exact pins per project hard rule #2.
+dependencies = [
+    "langchain==1.3.7",
+    "langgraph==1.2.4",
+    "langchain-anthropic==1.4.5",
+    "langgraph-checkpoint-sqlite==3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.0.3",
+    "ruff==0.15.16",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["agent*"]
+
+[tool.ruff]
+line-length = 112
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ANN"]
+ignore = ["ANN401"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -43,6 +43,8 @@ export interface AnalysisResult {
   sessionsDisabledByTimestamps: boolean;
   skippedAnalyzers: string[];
   pricingLastVerified: string | null;
+  /** Normalized models used in this dataset whose price entry is an UNVERIFIED placeholder. */
+  unverifiedPricing: string[];
   overridePath: string;
 }
 
@@ -173,14 +175,21 @@ export function analyze(
 
   const requestCount = working.reduce((acc, r) => acc + (r.n_requests ?? 1), 0);
 
-  // Latest last_verified across the active pricing table, for the report footer.
+  // Pricing provenance for the report footer: the latest verified date across
+  // the active table, plus any models USED in this dataset whose price entry
+  // is an UNVERIFIED placeholder (must be surfaced — wrong math kills trust).
   let pricingLastVerified: string | null = null;
   for (const models of Object.values(pricing.models)) {
     for (const p of Object.values(models)) {
-      if (p.last_verified && (!pricingLastVerified || p.last_verified > pricingLastVerified)) {
+      if (p.last_verified && p.last_verified !== "UNVERIFIED" && (!pricingLastVerified || p.last_verified > pricingLastVerified)) {
         pricingLastVerified = p.last_verified;
       }
     }
+  }
+  const unverifiedPricing = new Set<string>();
+  for (const r of working) {
+    const p = pricing.lookup(r.provider, r.model);
+    if (p && p.last_verified === "UNVERIFIED") unverifiedPricing.add(pricing.normalize(r.model));
   }
 
   return {
@@ -208,6 +217,7 @@ export function analyze(
     sessionsDisabledByTimestamps,
     skippedAnalyzers,
     pricingLastVerified,
+    unverifiedPricing: [...unverifiedPricing].sort(),
     overridePath: pricing.overridePath,
   };
 }

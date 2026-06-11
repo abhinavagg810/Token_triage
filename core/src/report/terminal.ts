@@ -87,6 +87,16 @@ export function renderTerminal(result: AnalysisResult, reportPath: string | null
     lines.push(c(DIM, `Skipped analyzers (timestamps unusable): ${result.skippedAnalyzers.join(", ")}`));
   }
 
+  if (result.unverifiedPricing.length > 0) {
+    lines.push("");
+    lines.push(
+      c(
+        DIM,
+        `Pricing note: bundled prices for ${result.unverifiedPricing.join(", ")} are UNVERIFIED placeholders — verify or override before relying on $ figures.`
+      )
+    );
+  }
+
   if (reportPath) {
     lines.push("");
     lines.push(`Report written: ${c(CYAN, reportPath)}`);

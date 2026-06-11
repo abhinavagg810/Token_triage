@@ -1,35 +1,46 @@
-# TokenTriage — working notes for Claude Code
+# TokenTriage — Project Instructions
 
-The product spec lives in **PRD.md** at the repo root — read it before changing behavior.
-Error/warning copy (E-101, E-102, W-201…W-203), analyzer formulas, and the CLI surface
-are specified there exactly; don't drift from them.
+## What this is
+Open-source LLM token bill auditor. Ingests API request logs, runs deterministic
+waste analyzers, outputs a diagnosis report (terminal + single-file HTML), plus a
+LangGraph-based investigation/Q&A agent service. Full spec: PRD.md — it is the
+source of truth. When this file and PRD.md conflict, PRD.md wins.
 
-## Architecture
+## Architecture (two services, one repo)
+- `core/`  — TypeScript CLI: ingestion, analyzers, reports. NO LLM calls except
+  the opt-in --narrate flag. All savings math must be deterministic and reproducible.
+- `agent/` — Python 3.11 LangGraph service: investigation agent + spend Q&A agent.
+  Reads the SQLite database exported by the core CLI (`--db`, schema in
+  docs/db-schema.md). This is the ONLY place LangChain/LangGraph is used.
 
-```
-src/cli.ts          commander CLI (analyze | demo | formats | pricing)
-src/ingest/         format detection + adapters → canonical schema (src/core/schema.ts)
-src/core/           pricing table, session reconstruction, claimed-token ledger, engine
-src/analyzers/      one module per analyzer; index.ts array order == ledger priority
-src/report/         terminal table, --json, single-file HTML, optional --narrate
-scripts/            sample dataset generator (deterministic, seeded)
-```
-
-## Invariants
-
-- **Privacy:** prompt bodies are hashed in memory only — never written to disk, cache, or report.
-- **No network calls** except opt-in `--narrate` (aggregated findings only).
-- **Ledger:** a token is claimed by exactly one analyzer; run order A4 → A1 → A2 → A3 → A5.
-- **Conservative math:** "up to" labels for heuristics, documented thresholds in
-  `src/analyzers/THRESHOLDS.md`.
-- The bundled sample must keep all five analyzers firing near the PRD §12.5 table
-  (asserted in `test/engine.test.ts`). After touching analyzers or the generator, run
-  `npm run generate-sample && npm run dev -- demo` and check the table.
+## Hard rules
+1. TypeScript strict mode. Python with type hints + ruff.
+2. LangChain: pin exact versions in agent/pyproject.toml. Use LangChain 1.x /
+   LangGraph patterns ONLY: create_agent, StateGraph, tool decorators.
+   NEVER use legacy patterns: LLMChain, initialize_agent, AgentExecutor,
+   ConversationChain. If you are unsure whether a pattern is legacy, ask me.
+3. Privacy: never write prompt/response bodies to disk, DB, or reports.
+   Hashes and token counts only. No telemetry. No network calls except
+   --narrate and the agent's own LLM calls (user's key via env var).
+4. Every analyzer has unit tests with positive AND negative fixtures
+   (logs that must trigger it, logs that must not).
+5. Double-counting ledger: a token may be claimed by exactly one analyzer.
+   Priority: retry-waste > cache-miss > dead-weight > context-bloat >
+   model-overkill > verbose-output. (dead-weight is the A6 stretch analyzer —
+   not yet implemented; the order holds for the implemented set.)
+6. All user-facing copy (errors, warnings, report text) must match PRD.md §5.7
+   exactly.
+7. After completing any task: run the test suite, then run
+   `npm run dev -- analyze samples/sample-logs.jsonl` (from core/) and paste
+   the terminal output so I can verify the numbers.
 
 ## Commands
+- core: `cd core && npm test` | `npm run dev -- <args>` | `npm run build` |
+  `npm run generate-sample`
+- agent: `cd agent && pytest` | `python -m agent.cli <args>`
 
-```bash
-npm test                  # vitest
-npm run dev -- demo       # end-to-end smoke test
-npm run build             # tsc → dist (bin: dist/cli.js)
-```
+## Definition of done for the whole project
+`npx tokentriage demo` reproduces the Meridian Labs expected-findings table in
+PRD.md §12.5 within ±10% (asserted in core/test/engine.test.ts), and the agent
+answers "why was day 12 expensive?" correctly (retry storm) against the sample
+database.

@@ -4,3 +4,12 @@ dist/
 .DS_Store
 tokentriage-report.html
 coverage/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+*.sqlite
+*.db
+!agent/tests/fixtures/*.db

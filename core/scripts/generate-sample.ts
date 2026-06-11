@@ -67,7 +67,13 @@ interface Rec {
 const records: Rec[] = [];
 let idCounter = 0;
 function push(ts: number, partial: Omit<Rec, "id" | "timestamp">): Rec {
-  const rec: Rec = { id: `req_${String(++idCounter).padStart(6, "0")}`, timestamp: new Date(ts).toISOString(), ...partial };
+  // id/timestamp come last so callers re-pushing a previous record (retry
+  // patterns spread the original) always get a fresh identity.
+  const rec: Rec = {
+    ...partial,
+    id: `req_${String(++idCounter).padStart(6, "0")}`,
+    timestamp: new Date(ts).toISOString(),
+  };
   records.push(rec);
   return rec;
 }
