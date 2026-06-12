@@ -6,8 +6,8 @@ open a PR — these are starting points, not laws.
 
 All analyzers share a **claimed-token ledger**: a token can be claimed by only
 one analyzer. Run order is the priority order — **A4 retry → A1 cache-miss →
-A2 context-bloat → A3 model-overkill → A5 verbose-output** — so waste from a
-retried call is never also counted as a cache miss, and so on.
+A6 dead-weight → A2 context-bloat → A3 model-overkill → A5 verbose-output** —
+so waste from a retried call is never also counted as a cache miss, and so on.
 
 Percentages in the report are of **total spend**. Monthly projections are
 `wasted_usd × (30 / days_in_dataset)`, always shown alongside the period they
@@ -50,6 +50,25 @@ The rewrite term conservatively assumes the cache is re-written every
 
 **Confidence** — High when real hashes are available; Medium if estimated
 from token patterns only.
+
+## A6 — Dead-weight prompt (`dead-weight`)
+
+A1 without hashes: a large static block inferred purely from token patterns.
+
+**Detection** — among records with **no** `system_prompt_hash` (hashed groups
+belong to A1, which runs first), grouped by provider + model + service tag:
+**≥ 20 calls**, zero cache reads, input floor **≥ 5,000 tokens**, and a flat
+floor (**p25 ≤ 1.3 × min**) — the signature of a static block plus a smaller
+variable suffix.
+
+**Block estimation** — `block_tokens = min(input_tokens)` across the group.
+
+**Waste** — same math as A1 applied to the inferred block (including the
+cache-rewrite deduction).
+
+**Confidence** — Low, by construction: a token floor can also come from
+genuinely variable payloads. The fix explicitly says to verify the block
+exists before restructuring.
 
 ## A2 — Context bloat (`context-bloat`)
 

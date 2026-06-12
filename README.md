@@ -106,6 +106,7 @@ Only `model`, `input_tokens`, `output_tokens`, and `timestamp` are required — 
 | **Context bloat** | Agent/chat sessions resending full history every turn | High |
 | **Retry/duplicate waste** | Identical prompts re-fired within 60s, or retried verbatim after errors | High |
 | **Model overkill** | Classification-shaped calls (tiny outputs) on frontier models | Medium, "up to" |
+| **Dead-weight prompt** | A large static block inferred from token floors, resent uncached (no hashes needed) | Low |
 | **Verbose output** | Uncapped calls (no `max_tokens`) producing outlier-long outputs | Low |
 
 A **claimed-token ledger** guarantees no token is counted by two analyzers, so the waste figures add up honestly. Every threshold and formula is documented in [`core/src/analyzers/THRESHOLDS.md`](core/src/analyzers/THRESHOLDS.md) — if one looks wrong for your workload, open a PR.

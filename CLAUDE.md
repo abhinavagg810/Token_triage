@@ -26,8 +26,7 @@ source of truth. When this file and PRD.md conflict, PRD.md wins.
    (logs that must trigger it, logs that must not).
 5. Double-counting ledger: a token may be claimed by exactly one analyzer.
    Priority: retry-waste > cache-miss > dead-weight > context-bloat >
-   model-overkill > verbose-output. (dead-weight is the A6 stretch analyzer —
-   not yet implemented; the order holds for the implemented set.)
+   model-overkill > verbose-output.
 6. All user-facing copy (errors, warnings, report text) must match PRD.md §5.7
    exactly.
 7. After completing any task: run the test suite, then run

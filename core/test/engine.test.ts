@@ -89,7 +89,7 @@ describe("engine", () => {
     expect(result.records).toHaveLength(1);
   });
 
-  it("sample dataset reproduces the PRD §12.5 story (all five analyzers fire)", () => {
+  it("sample dataset reproduces the PRD §12.5 story (every analyzer fires)", () => {
     const samplePath = path.resolve(__dirname, "..", "samples", "sample-logs.jsonl");
     const { records, skips } = ingestGenericJsonl(fs.readFileSync(samplePath, "utf-8"));
     const result = analyze(records, testPricing(), skips);
@@ -98,6 +98,7 @@ describe("engine", () => {
     expect(Object.keys(byId).sort()).toEqual([
       "cache-miss",
       "context-bloat",
+      "dead-weight",
       "model-overkill",
       "retry-waste",
       "verbose-output",
@@ -109,8 +110,54 @@ describe("engine", () => {
     expect(byId["context-bloat"]!.pct_of_total).toBeLessThan(0.12);
     expect(byId["model-overkill"]!.upper_bound).toBe(true);
     expect(byId["retry-waste"]!.evidence.some((e) => e.detail.includes("2026-05-12"))).toBe(true);
+    // A6 (stretch): the webhook-router's uncached document-processing block
+    expect(byId["dead-weight"]!.confidence).toBe("low");
+    expect(byId["dead-weight"]!.wasted_usd).toBeGreaterThan(15);
+    expect(byId["dead-weight"]!.wasted_usd).toBeLessThan(45);
     expect(result.totalSpend).toBeGreaterThan(800);
     expect(result.totalSpend).toBeLessThan(1100);
     expect(result.addressableWaste).toBeLessThanOrEqual(result.totalSpend);
+  });
+
+  it("invariant: addressable waste never exceeds total spend (randomized)", () => {
+    // Seeded pseudo-random datasets hammering the claimed-token ledger:
+    // duplicate hashes, shared system prompts, sessions, uncapped outputs.
+    let seed = 0xc0ffee;
+    const rand = () => {
+      seed |= 0;
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const pick = <T>(arr: T[]): T => arr[Math.floor(rand() * arr.length)]!;
+
+    for (let iter = 0; iter < 30; iter++) {
+      const base = Date.UTC(2026, 4, 1) + iter * 1000;
+      const n = 30 + Math.floor(rand() * 120);
+      const records = Array.from({ length: n }, (_, i) =>
+        rec({
+          id: `r${iter}_${i}`,
+          ts: base + Math.floor(rand() * 20) * 30_000,
+          model: pick(["claude-sonnet-4-5", "claude-opus-4-1", "gpt-4o", "claude-haiku-4-5"]),
+          provider: rand() < 0.7 ? "anthropic" : "openai",
+          input_tokens: Math.floor(rand() * 40_000),
+          output_tokens: Math.floor(rand() * 3_000),
+          cache_read_tokens: rand() < 0.2 ? Math.floor(rand() * 5_000) : 0,
+          status: rand() < 0.1 ? 500 : 200,
+          session_id: rand() < 0.3 ? `s${Math.floor(rand() * 4)}` : null,
+          system_prompt_hash: rand() < 0.6 ? `h${Math.floor(rand() * 3)}` : null,
+          full_prompt_hash: rand() < 0.5 ? `f${Math.floor(rand() * 10)}` : `u${iter}_${i}`,
+          max_tokens_set: rand() < 0.7,
+          metadata: rand() < 0.5 ? { service: `svc${Math.floor(rand() * 3)}` } : {},
+        })
+      );
+      const result = analyze(records, testPricing(), noSkips());
+      expect(result.addressableWaste).toBeLessThanOrEqual(result.totalSpend + 1e-9);
+      for (const f of result.findings) {
+        expect(f.wasted_usd).toBeGreaterThanOrEqual(0);
+        expect(f.pct_of_total).toBeLessThanOrEqual(1);
+      }
+    }
   });
 });
