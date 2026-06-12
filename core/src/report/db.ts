@@ -32,9 +32,13 @@ export async function exportDb(
   }
 
   const fs = await import("node:fs");
-  if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath); // full re-export, not incremental
+  // Write to a temp file and rename over the target: readers (the dashboard,
+  // watch mode) atomically see either the old export or the new one, never a
+  // half-written database.
+  const tmpPath = dbPath + ".tmp";
+  if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
 
-  const db = new DatabaseSync(dbPath);
+  const db = new DatabaseSync(tmpPath);
   try {
     db.exec(`
       PRAGMA journal_mode = WAL;
@@ -190,14 +194,23 @@ export async function exportDb(
     for (const [k, v] of Object.entries(meta)) insMeta.run(k, v);
     db.exec("COMMIT");
 
+    db.close();
+    fs.renameSync(tmpPath, dbPath); // atomic swap
+
     return {
       requests: result.records.length,
       sessions: result.sessions.length,
       findings: result.findings.length,
       daily_spend: result.dailySpend.length,
     };
-  } finally {
-    db.close();
+  } catch (err) {
+    try {
+      db.close();
+    } catch {
+      /* already closed on the success path before a rename failure */
+    }
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    throw err;
   }
 }
 

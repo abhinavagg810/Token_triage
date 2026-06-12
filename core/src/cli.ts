@@ -123,6 +123,47 @@ program
   });
 
 program
+  .command("watch")
+  .description("One-command live mode: capture proxy + dashboard + automatic re-analysis. Connect your SDK and watch findings update. Node 22.5+")
+  .option("--proxy-port <port>", "capture proxy port", "8484")
+  .option("--port <port>", "dashboard port", "4117")
+  .option("--host <host>", "host to bind (keep it local)", "127.0.0.1")
+  .option("--capture <file>", "capture JSONL path", "tokentriage-capture.jsonl")
+  .option("--db <path>", "live SQLite export path", "tokentriage-live.db")
+  .option("--interval <seconds>", "re-analysis interval when new traffic arrived", "15")
+  .action(async (flags: { proxyPort: string; port: string; host: string; capture: string; db: string; interval: string }) => {
+    const { startWatch } = await import("./serve/watch.js");
+    try {
+      await startWatch({
+        host: flags.host,
+        proxyPort: Number(flags.proxyPort),
+        dashboardPort: Number(flags.port),
+        captureFile: path.resolve(flags.capture),
+        dbPath: path.resolve(flags.db),
+        intervalMs: Math.max(2, Number(flags.interval) || 15) * 1000,
+        onAnalyzed: (summary) => console.error(`[analyzed] ${summary}`),
+      });
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+      return;
+    }
+    console.log("TokenTriage live mode");
+    console.log(`  Dashboard:  http://${flags.host}:${flags.port}`);
+    console.log(`  Proxy:      http://${flags.host}:${flags.proxyPort}`);
+    console.log("");
+    console.log("Connect your app (that's the whole setup):");
+    console.log(`  export ANTHROPIC_BASE_URL=http://${flags.host}:${flags.proxyPort}`);
+    console.log(`  export OPENAI_BASE_URL=http://${flags.host}:${flags.proxyPort}/v1`);
+    console.log("");
+    console.log("Traffic passes through to the providers untouched; usage metadata (never");
+    console.log("content, never keys) is analyzed automatically and the dashboard stays current.");
+    console.log("Ctrl-C to stop.");
+    // keep the process alive (servers are unref-safe via the interval)
+    await new Promise(() => {});
+  });
+
+program
   .command("proxy")
   .description("Real-time capture: local pass-through proxy for Anthropic/OpenAI that logs usage metadata (never content) to a JSONL")
   .option("--port <port>", "port to listen on", "8484")

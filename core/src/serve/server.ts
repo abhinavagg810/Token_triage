@@ -34,7 +34,35 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
     throw new Error("`tokentriage serve` requires Node.js >= 22.5 (uses the built-in node:sqlite module).");
   }
 
-  const db = new DatabaseSync(options.dbPath, { readOnly: true });
+  const fsMod = await import("node:fs");
+  const fileStamp = (): string => {
+    const st = fsMod.statSync(options.dbPath);
+    return `${st.ino}:${st.mtimeMs}:${st.size}`;
+  };
+
+  let db = new DatabaseSync(options.dbPath, { readOnly: true });
+  let stamp = fileStamp();
+
+  // Hot reload: `analyze --db` and watch mode atomically swap the file
+  // (write-temp-then-rename), so a changed inode/mtime means a fresh export —
+  // reopen so the dashboard always serves the latest analysis.
+  const currentDb = (): NodeSqliteDb => {
+    try {
+      const next = fileStamp();
+      if (next !== stamp) {
+        try {
+          db.close();
+        } catch {
+          /* ignore */
+        }
+        db = new DatabaseSync(options.dbPath, { readOnly: true });
+        stamp = next;
+      }
+    } catch {
+      /* stat failed mid-swap — keep serving the open handle */
+    }
+    return db;
+  };
 
   // Fail fast on a non-TokenTriage database.
   const schema = db.prepare("SELECT value FROM meta WHERE key='schema_version'").get() as
@@ -206,6 +234,7 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
         res.end(JSON.stringify({ error: "not found" }));
         return;
       }
+      currentDb(); // reopen `db` if the export was swapped since the last request
       const payload = handler(url.searchParams);
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(payload));

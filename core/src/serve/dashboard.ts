@@ -159,6 +159,7 @@ function barRow(label, value, max, detail) {
 
 async function loadHeader() {
   const { meta, counts } = await j("/api/meta");
+  state.generatedAt = meta.generated_at || "";
   $("sub").textContent = meta.period_start + " → " + meta.period_end + " · " + meta.days_in_dataset +
     " days · " + Number(meta.request_count).toLocaleString() + " requests · exported " + (meta.generated_at || "").slice(0, 19);
   const total = Number(meta.total_spend_usd), waste = Number(meta.addressable_waste_usd);
@@ -326,6 +327,11 @@ async function loadAgentRuns() {
 }
 
 async function populateFilterOptions() {
+  // Reset to just the "all" option so auto-refresh doesn't duplicate entries.
+  for (const id of ["f-model", "f-service"]) {
+    const sel = $(id);
+    while (sel.options.length > 1) sel.remove(1);
+  }
   const [models, services] = await Promise.all([j("/api/models", {}), j("/api/services", {})]);
   models.forEach((m) => {
     const o = el("option", m.model); o.value = m.model; $("f-model").appendChild(o);
@@ -369,6 +375,19 @@ $("r-next").addEventListener("click", () => { state.offset += state.limit; loadR
     $("sub").textContent = "Failed to load: " + err.message;
   }
 })();
+
+// Auto-refresh: watch mode re-analyzes continuously and swaps the export;
+// when the export's generated_at changes, reload everything in place.
+setInterval(async () => {
+  try {
+    const { meta } = await j("/api/meta");
+    if (meta.generated_at && meta.generated_at !== state.generatedAt) {
+      await loadHeader();
+      await Promise.all([loadFindings(), populateFilterOptions(), loadAgentRuns()]);
+      await refresh();
+    }
+  } catch { /* server briefly mid-swap — try again next tick */ }
+}, 10000);
 </script>
 </body></html>`;
 }

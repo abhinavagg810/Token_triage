@@ -65,7 +65,21 @@ waste crosses a threshold:
 
 ## Real-time / continuous monitoring
 
-Three ways to keep the data fresh, in increasing order of plumbing:
+**The simplest path is one command + one environment variable:**
+
+```bash
+tokentriage watch
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8484   # in your app's environment
+```
+
+`watch` bundles the capture proxy, the dashboard, and a re-analysis loop into
+one process: traffic flows through to the provider unchanged, and the
+dashboard at http://127.0.0.1:4117 updates its findings automatically as
+requests arrive. Stop it any time — the capture file and database remain, and
+every other command (`analyze`, `serve`, the agent) works on them.
+
+For setups where `watch` doesn't fit, three ways to keep the data fresh, in
+increasing order of plumbing:
 
 1. **Already on Helicone/Langfuse/etc.** — keep logging there (those proxies/SDK
    wrappers are your real-time capture) and schedule an export + `tokentriage

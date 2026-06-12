@@ -56,9 +56,18 @@ python -m agent.cli --db ../tokentriage.db investigate --date 2026-05-12
 
 `investigate` runs an explicit LangGraph state machine (detect anomaly → hypothesize → gather evidence with capped tool calls → verify → incident report) with resumable SQLite checkpoints. The agent logs its **own** token usage to the `agent_runs` table — TokenTriage audits itself. The database schema is documented in [`docs/db-schema.md`](docs/db-schema.md).
 
-## Track usage in real time (capture proxy)
+## Live mode — connect your Claude and watch (one command)
 
-No observability stack? `tokentriage proxy` is a local pass-through proxy for the Anthropic and OpenAI APIs that records usage metadata as your app runs — tokens, hashes, latency, status — **never prompt content, never API keys**:
+```bash
+tokentriage watch
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8484    # ← the whole integration
+```
+
+That's the entire setup. `watch` runs the capture proxy and the dashboard in one process and re-analyzes automatically whenever new traffic arrives: your app's requests pass through to Anthropic/OpenAI untouched (streaming included), usage metadata is captured locally, and **http://127.0.0.1:4117** shows findings and fixes that update on their own — no cron, no exports, no extra commands. OpenAI apps connect the same way via `OPENAI_BASE_URL=http://127.0.0.1:8484/v1`.
+
+## Capture proxy (the piece `watch` is built on)
+
+`tokentriage proxy` is the standalone pass-through proxy for the Anthropic and OpenAI APIs that records usage metadata as your app runs — tokens, hashes, latency, status — **never prompt content, never API keys** — for setups that want to run analysis on their own schedule:
 
 ```bash
 tokentriage proxy                                   # listens on 127.0.0.1:8484
@@ -152,6 +161,7 @@ A **claimed-token ledger** guarantees no token is counted by two analyzers, so t
 | `tokentriage formats` | Supported input formats + canonical schema |
 | `tokentriage pricing` | Active pricing table + override path |
 | `tokentriage serve [--db audit.db] [--port 4117]` | Local web dashboard over a SQLite export (Node 22.5+) |
+| `tokentriage watch [--proxy-port 8484] [--port 4117]` | One-command live mode: proxy + dashboard + automatic re-analysis (Node 22.5+) |
 | `tokentriage proxy [--port 8484] [--out capture.jsonl]` | Real-time capture: local pass-through proxy logging usage metadata (never content) |
 
 `--json` emits machine-readable findings for CI (e.g. fail a pipeline if waste > 30%). `--narrate` adds an LLM-written executive summary to the report using your own key in `TOKENTRIAGE_LLM_KEY` — the only network call in the core tool, off by default. `--db` exports the normalized analysis to SQLite for the agent service ([schema](docs/db-schema.md)).
