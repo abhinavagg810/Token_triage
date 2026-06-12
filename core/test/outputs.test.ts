@@ -86,7 +86,8 @@ describe("HTML report", () => {
     expect(html).toContain("Potential monthly savings");
     expect(html).toContain("Prompt caching not used");
     expect(html).toContain("cache_control"); // copyable fix snippet
-    expect(html).toContain("Unverified pricing"); // placeholder prices surfaced
+    expect(html).toContain("last verified 2026-06-12"); // pricing provenance in footer
+    expect(html).not.toContain("Unverified pricing"); // all bundled prices are verified
     expect(html).toContain("no data left this machine");
   });
 

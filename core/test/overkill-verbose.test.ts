@@ -17,9 +17,11 @@ describe("A3 model-overkill", () => {
     expect(finding).not.toBeNull();
     expect(finding!.upper_bound).toBe(true);
     expect(finding!.confidence).toBe("medium");
-    // vs cheapest anthropic budget tier (claude-haiku-3-5: $0.80/$4.00)
-    const perCall = (1500 * (15 - 0.8) + 40 * (75 - 4)) / 1e6;
+    // vs cheapest NON-RETIRED anthropic budget tier (claude-haiku-4-5: $1/$5;
+    // haiku-3-5 is cheaper but retired, so it must not be the recommended route)
+    const perCall = (1500 * (15 - 1) + 40 * (75 - 5)) / 1e6;
     expect(finding!.wasted_usd).toBeCloseTo(50 * perCall, 4);
+    expect(JSON.stringify(finding!.evidence)).toContain("claude-haiku-4-5");
   });
 
   it("does not fire on budget models", () => {

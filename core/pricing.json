@@ -1,7 +1,43 @@
 {
-  "_comment": "Per-MTok USD pricing. Verify against provider pricing pages before relying on figures — see last_verified per entry. Users can override via ~/.tokentriage/pricing.override.json (same shape; override wins on conflict). tier is used by the model-overkill analyzer to find a cheaper same-provider route.",
+  "_comment": "Per-MTok USD pricing, verified 2026-06-12 against provider pricing pages (Anthropic: platform.claude.com/docs/en/about-claude/pricing; OpenAI: openai.com/api/pricing). Anthropic cache reads are 0.1x input, 5-minute cache writes 1.25x input. Users can override via ~/.tokentriage/pricing.override.json (same shape; override wins on conflict). `tier` drives the model-overkill analyzer's cheaper-route suggestion; `retired: true` keeps a model priceable for historical logs but excludes it from routing recommendations.",
   "models": {
     "anthropic": {
+      "claude-fable-5": {
+        "input_per_mtok": 10.0,
+        "output_per_mtok": 50.0,
+        "cache_read_per_mtok": 1.0,
+        "cache_write_per_mtok": 12.5,
+        "tier": "frontier",
+        "supports_caching": true,
+        "last_verified": "2026-06-12"
+      },
+      "claude-opus-4-8": {
+        "input_per_mtok": 5.0,
+        "output_per_mtok": 25.0,
+        "cache_read_per_mtok": 0.5,
+        "cache_write_per_mtok": 6.25,
+        "tier": "frontier",
+        "supports_caching": true,
+        "last_verified": "2026-06-12"
+      },
+      "claude-opus-4-7": {
+        "input_per_mtok": 5.0,
+        "output_per_mtok": 25.0,
+        "cache_read_per_mtok": 0.5,
+        "cache_write_per_mtok": 6.25,
+        "tier": "frontier",
+        "supports_caching": true,
+        "last_verified": "2026-06-12"
+      },
+      "claude-opus-4-6": {
+        "input_per_mtok": 5.0,
+        "output_per_mtok": 25.0,
+        "cache_read_per_mtok": 0.5,
+        "cache_write_per_mtok": 6.25,
+        "tier": "frontier",
+        "supports_caching": true,
+        "last_verified": "2026-06-12"
+      },
       "claude-opus-4-5": {
         "input_per_mtok": 5.0,
         "output_per_mtok": 25.0,
@@ -9,7 +45,7 @@
         "cache_write_per_mtok": 6.25,
         "tier": "frontier",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "claude-opus-4-1": {
         "input_per_mtok": 15.0,
@@ -18,7 +54,16 @@
         "cache_write_per_mtok": 18.75,
         "tier": "frontier",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
+      },
+      "claude-sonnet-4-6": {
+        "input_per_mtok": 3.0,
+        "output_per_mtok": 15.0,
+        "cache_read_per_mtok": 0.3,
+        "cache_write_per_mtok": 3.75,
+        "tier": "frontier",
+        "supports_caching": true,
+        "last_verified": "2026-06-12"
       },
       "claude-sonnet-4-5": {
         "input_per_mtok": 3.0,
@@ -27,7 +72,7 @@
         "cache_write_per_mtok": 3.75,
         "tier": "frontier",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "claude-sonnet-4": {
         "input_per_mtok": 3.0,
@@ -36,7 +81,7 @@
         "cache_write_per_mtok": 3.75,
         "tier": "frontier",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "claude-haiku-4-5": {
         "input_per_mtok": 1.0,
@@ -45,7 +90,7 @@
         "cache_write_per_mtok": 1.25,
         "tier": "budget",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "claude-haiku-3-5": {
         "input_per_mtok": 0.8,
@@ -54,7 +99,8 @@
         "cache_write_per_mtok": 1.0,
         "tier": "budget",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "retired": true,
+        "last_verified": "2026-06-12"
       }
     },
     "openai": {
@@ -65,7 +111,7 @@
         "cache_write_per_mtok": 0,
         "tier": "frontier",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "gpt-4o-mini": {
         "input_per_mtok": 0.15,
@@ -74,7 +120,7 @@
         "cache_write_per_mtok": 0,
         "tier": "budget",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "gpt-4.1": {
         "input_per_mtok": 2.0,
@@ -83,7 +129,7 @@
         "cache_write_per_mtok": 0,
         "tier": "frontier",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "gpt-4.1-mini": {
         "input_per_mtok": 0.4,
@@ -92,7 +138,7 @@
         "cache_write_per_mtok": 0,
         "tier": "budget",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "gpt-4.1-nano": {
         "input_per_mtok": 0.1,
@@ -101,7 +147,7 @@
         "cache_write_per_mtok": 0,
         "tier": "budget",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "gpt-5": {
         "input_per_mtok": 1.25,
@@ -110,7 +156,7 @@
         "cache_write_per_mtok": 0,
         "tier": "frontier",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "gpt-5-mini": {
         "input_per_mtok": 0.25,
@@ -119,7 +165,7 @@
         "cache_write_per_mtok": 0,
         "tier": "budget",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       },
       "o3": {
         "input_per_mtok": 2.0,
@@ -128,7 +174,7 @@
         "cache_write_per_mtok": 0,
         "tier": "frontier",
         "supports_caching": true,
-        "last_verified": "UNVERIFIED"
+        "last_verified": "2026-06-12"
       }
     }
   },

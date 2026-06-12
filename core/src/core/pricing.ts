@@ -11,6 +11,8 @@ export interface ModelPrice {
   cache_write_per_mtok: number;
   tier?: "frontier" | "mid" | "budget";
   supports_caching?: boolean;
+  /** Priced for historical logs but excluded from routing recommendations. */
+  retired?: boolean;
   last_verified?: string;
 }
 
@@ -76,13 +78,17 @@ export class PricingTable {
     );
   }
 
-  /** Cheapest budget-tier model from the same provider (for model-overkill routing). */
+  /**
+   * Cheapest budget-tier model from the same provider (for model-overkill
+   * routing). Retired models stay priceable for historical logs but are
+   * never recommended as a route.
+   */
   cheapestBudget(provider: string): { model: string; price: ModelPrice } | null {
     const models = this.models[provider];
     if (!models) return null;
     let best: { model: string; price: ModelPrice } | null = null;
     for (const [model, price] of Object.entries(models)) {
-      if (price.tier !== "budget") continue;
+      if (price.tier !== "budget" || price.retired) continue;
       if (!best || price.input_per_mtok < best.price.input_per_mtok) {
         best = { model, price };
       }

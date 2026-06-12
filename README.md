@@ -6,13 +6,13 @@ TokenTriage is an open-source CLI that explains **why** your LLM API bill is hig
 
 ```
 TokenTriage — analyzed 10,133 requests · 1 May – 30 May 2026 (30 days)
-Total spend: $919.70        Addressable waste found: $475.42 (51.7%)
+Total spend: $919.70        Addressable waste found: $474.96 (51.6%)
 
  #   Cause                                          Waste   % of spend   Monthly savings   Confidence
  1   Prompt caching not used                      $261.00        28.4%           $261/mo         High
  2   Context bloat (agents)                        $93.46        10.2%            $93/mo         High
  3   Retry/duplicate calls                         $41.88         4.6%            $42/mo         High
- 4   Model overkill                                $31.05         3.4%      up to $31/mo       Medium
+ 4   Model overkill                                $30.59         3.3%      up to $31/mo       Medium
  5   Dead-weight prompt (uncached static block)    $28.95         3.1%            $29/mo          Low
  6   Verbose output (no max_tokens)                $19.08         2.1%            $19/mo          Low
 
@@ -129,7 +129,7 @@ A **claimed-token ledger** guarantees no token is counted by two analyzers, so t
 
 ## Pricing data
 
-Model prices ship in [`core/pricing.json`](core/pricing.json) with a `last_verified` field per entry (shown in the report footer). **The bundled figures are currently `UNVERIFIED` placeholders** — the report and terminal flag any model priced from a placeholder. Verify against the provider pricing pages, or set your real rates (e.g. negotiated ones) in `~/.tokentriage/pricing.override.json`; the override wins on conflict.
+Model prices ship in [`core/pricing.json`](core/pricing.json) with a `last_verified` date per entry (shown in the report footer) — currently verified **2026-06-12** against the Anthropic and OpenAI pricing pages. Provider pricing changes frequently: if the dates look stale, re-check before relying on the dollar amounts, or set your real rates (e.g. negotiated ones) in `~/.tokentriage/pricing.override.json`; the override wins on conflict. Retired models stay priced so historical logs still cost correctly, but are never recommended as a routing target.
 
 All savings figures are **estimates**, deliberately conservative: p75 baselines, "up to" labels on heuristic findings, cache-write overhead subtracted from caching savings.
 
