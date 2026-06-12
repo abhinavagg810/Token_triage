@@ -56,6 +56,22 @@ python -m agent.cli --db ../tokentriage.db investigate --date 2026-05-12
 
 `investigate` runs an explicit LangGraph state machine (detect anomaly → hypothesize → gather evidence with capped tool calls → verify → incident report) with resumable SQLite checkpoints. The agent logs its **own** token usage to the `agent_runs` table — TokenTriage audits itself. The database schema is documented in [`docs/db-schema.md`](docs/db-schema.md).
 
+## Track usage in real time (capture proxy)
+
+No observability stack? `tokentriage proxy` is a local pass-through proxy for the Anthropic and OpenAI APIs that records usage metadata as your app runs — tokens, hashes, latency, status — **never prompt content, never API keys**:
+
+```bash
+tokentriage proxy                                   # listens on 127.0.0.1:8484
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8484     # point your SDKs at it
+export OPENAI_BASE_URL=http://127.0.0.1:8484/v1
+# ... run your app normally; requests pass through byte-for-byte (streaming included)
+
+tokentriage analyze tokentriage-capture.jsonl --db live.db   # anytime
+tokentriage serve --db live.db                               # live-ish dashboard
+```
+
+Send `x-tokentriage-service` / `x-tokentriage-session` headers for attribution — the proxy consumes them locally and strips them before forwarding.
+
 ## Explore interactively (local dashboard)
 
 `tokentriage serve` starts a local-only web dashboard over the SQLite export — the queryable counterpart to the static report:
@@ -136,6 +152,7 @@ A **claimed-token ledger** guarantees no token is counted by two analyzers, so t
 | `tokentriage formats` | Supported input formats + canonical schema |
 | `tokentriage pricing` | Active pricing table + override path |
 | `tokentriage serve [--db audit.db] [--port 4117]` | Local web dashboard over a SQLite export (Node 22.5+) |
+| `tokentriage proxy [--port 8484] [--out capture.jsonl]` | Real-time capture: local pass-through proxy logging usage metadata (never content) |
 
 `--json` emits machine-readable findings for CI (e.g. fail a pipeline if waste > 30%). `--narrate` adds an LLM-written executive summary to the report using your own key in `TOKENTRIAGE_LLM_KEY` — the only network call in the core tool, off by default. `--db` exports the normalized analysis to SQLite for the agent service ([schema](docs/db-schema.md)).
 

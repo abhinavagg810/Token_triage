@@ -123,6 +123,38 @@ program
   });
 
 program
+  .command("proxy")
+  .description("Real-time capture: local pass-through proxy for Anthropic/OpenAI that logs usage metadata (never content) to a JSONL")
+  .option("--port <port>", "port to listen on", "8484")
+  .option("--host <host>", "host to bind (keep it local)", "127.0.0.1")
+  .option("--out <file>", "capture file (generic JSONL, analyze ingests it directly)", "tokentriage-capture.jsonl")
+  .action(async (flags: { port: string; host: string; out: string }) => {
+    const { startProxy } = await import("./proxy/proxy.js");
+    const outPath = path.resolve(flags.out);
+    await startProxy({
+      port: Number(flags.port),
+      host: flags.host,
+      outPath,
+      onCapture: (r) => {
+        console.error(
+          `[capture] ${r.provider}/${r.model} in=${r.input_tokens} out=${r.output_tokens} cached=${r.cache_read_tokens} status=${r.status}`
+        );
+      },
+    });
+    console.log(`TokenTriage capture proxy: http://${flags.host}:${flags.port}`);
+    console.log(`Capturing usage metadata (never content) to ${outPath}`);
+    console.log("");
+    console.log("Point your SDKs at it:");
+    console.log(`  export ANTHROPIC_BASE_URL=http://${flags.host}:${flags.port}`);
+    console.log(`  export OPENAI_BASE_URL=http://${flags.host}:${flags.port}/v1`);
+    console.log("");
+    console.log("Optional attribution headers (consumed locally, stripped before forwarding):");
+    console.log("  x-tokentriage-service: <service name>   x-tokentriage-session: <session id>");
+    console.log("");
+    console.log(`Then anytime: tokentriage analyze ${flags.out} --db live.db && tokentriage serve --db live.db`);
+  });
+
+program
   .command("serve")
   .description("Serve a local web dashboard over a SQLite export (tokentriage analyze --db). Local only; requires Node 22.5+")
   .option("--db <path>", "SQLite export to serve", "tokentriage.db")

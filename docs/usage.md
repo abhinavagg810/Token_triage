@@ -63,6 +63,39 @@ waste crosses a threshold:
     awk "BEGIN{exit !($PCT > 30)}" && { echo "::error::waste >30%"; exit 1; } || true
 ```
 
+## Real-time / continuous monitoring
+
+Three ways to keep the data fresh, in increasing order of plumbing:
+
+1. **Already on Helicone/Langfuse/etc.** — keep logging there (those proxies/SDK
+   wrappers are your real-time capture) and schedule an export + `tokentriage
+   analyze` run (hourly/daily cron). TokenTriage stays the diagnosis layer on
+   top of whatever observability you trust.
+2. **No observability stack** — run `tokentriage proxy` next to your app and
+   point the SDKs at it (`ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL`). Requests
+   pass through unchanged (streaming included); usage metadata appends to a
+   JSONL continuously. Re-run `analyze --db` on a timer and keep `serve` open —
+   the dashboard reflects each new export.
+3. **Enterprise gateway** — if traffic already flows through a central LLM
+   gateway (Kong/Envoy/portkey-style), emit the canonical JSONL schema from the
+   gateway (the fields are documented under `tokentriage formats`) and skip the
+   proxy entirely. That gives fleet-wide capture with your existing auth.
+
+The always-on loop most teams land on:
+
+```
+SDKs → capture (proxy / Helicone / gateway) → JSONL
+cron: tokentriage analyze capture.jsonl --db live.db --json > findings.json
+      (alert if addressable_waste_pct crosses a threshold)
+tokentriage serve --db live.db          # dashboard for humans
+python -m agent.cli ask "..."           # summaries & suggestions on demand
+```
+
+`--narrate` adds an LLM-written executive summary to each scheduled report,
+and the agent's `investigate` command turns any anomaly the cron flags into a
+markdown incident report — that's the "summary and suggestions whenever
+required" path.
+
 ## Enterprise
 
 The properties that matter for security review, and how to operate at scale:
