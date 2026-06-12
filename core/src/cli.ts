@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
+import { loadDotEnv } from "./core/dotenv.js";
 import { ingestPath, IngestError } from "./ingest/index.js";
 import { loadPricing, bundledPricingPath, defaultOverridePath } from "./core/pricing.js";
 import { analyze } from "./core/engine.js";
@@ -12,6 +13,9 @@ import { renderHtml } from "./report/html.js";
 import { generateNarrative } from "./report/narrative.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Optional .env in the current folder (keys never live in the codebase itself).
+loadDotEnv();
 
 const program = new Command();
 program
