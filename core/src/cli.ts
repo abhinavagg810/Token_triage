@@ -128,7 +128,7 @@ program
 
 program
   .command("test-traffic")
-  .description("Send a few tiny real Claude requests through the local proxy so the watch dashboard lights up (costs under one cent)")
+  .description("Send a few tiny real Claude requests through the local proxy so the watch dashboard lights up (costs a few cents)")
   .option("--proxy <url>", "the running watch/proxy address", "http://127.0.0.1:8484")
   .option("--requests <n>", "how many requests to send", "12")
   .option("--model <model>", "model to use (Haiku keeps it nearly free)", "claude-haiku-4-5")

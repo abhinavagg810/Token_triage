@@ -2,11 +2,15 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 /**
  * `tokentriage test-traffic` — the non-technical path to a live demo: sends a
- * handful of tiny real requests THROUGH the local capture proxy so findings
- * appear on the watch dashboard. Uses the user's own key; defaults to Haiku
- * so the whole run costs well under one cent. The shared system prompt is
- * deliberate: 12 uncached repeats is exactly what the cache-miss analyzer
- * needs to fire.
+ * handful of real requests THROUGH the local capture proxy so findings appear
+ * on the watch dashboard. Uses the user's own key; defaults to Haiku so the
+ * whole run costs a few cents.
+ *
+ * The requests deliberately mimic a real app's wasteful shape: the same large
+ * (~4K-token) uncached system prompt on every call. That matters because the
+ * analyzers refuse to flag waste under one cent — tiny one-line prompts are
+ * (correctly) reported as "nothing significant to fix". Realistic size +
+ * >=10 repeats is what makes the cache-miss finding fire.
  */
 export interface TestTrafficOptions {
   proxyUrl: string;
@@ -15,6 +19,25 @@ export interface TestTrafficOptions {
   model: string;
   log?: (line: string) => void;
 }
+
+// ~16K characters ≈ 4K tokens — the size of a real support bot's system
+// prompt with product docs stuffed in. Identical on every call (uncached) =
+// the textbook cache-miss pattern.
+const FILLER =
+  "You handle customer questions about orders, refunds, shipping, returns, inventory, " +
+  "and billing. Always consult the product knowledge base before answering, cite the " +
+  "relevant policy section, and keep a warm, professional tone. Escalate to a human " +
+  "when the customer asks for one or mentions legal action. ";
+
+function buildSystemPrompt(): string {
+  let prompt =
+    "You are a haiku bot for the Meridian Labs support team. Always reply with exactly one short haiku.\n\n" +
+    "Background context (static team handbook, identical on every request):\n";
+  while (prompt.length < 16_000) prompt += FILLER;
+  return prompt;
+}
+
+const SYSTEM_PROMPT = buildSystemPrompt();
 
 export async function sendTestTraffic(options: TestTrafficOptions): Promise<{ ok: number; failed: number }> {
   const log = options.log ?? (() => {});
@@ -34,7 +57,7 @@ export async function sendTestTraffic(options: TestTrafficOptions): Promise<{ ok
         body: JSON.stringify({
           model: options.model,
           max_tokens: 100,
-          system: "You are a haiku bot. Always reply with exactly one short haiku.",
+          system: SYSTEM_PROMPT,
           messages: [{ role: "user", content: `haiku number ${i} about the seasons` }],
         }),
       });
