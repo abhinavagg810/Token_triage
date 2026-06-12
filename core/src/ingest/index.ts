@@ -90,7 +90,8 @@ export async function ingestPath(inputPath: string): Promise<IngestResult> {
       format === "generic-jsonl"
         ? await ingestGenericJsonlStream(file)
         : BUFFERED_INGESTERS[format]!(fs.readFileSync(file, "utf-8"));
-    allRecords.push(...records);
+    // No spread here: push(...arr) overflows the call stack on huge files.
+    for (const r of records) allRecords.push(r);
     skips.total += fileSkips.total;
     skips.skipped += fileSkips.skipped;
     for (const [field, count] of fileSkips.missingFields) {

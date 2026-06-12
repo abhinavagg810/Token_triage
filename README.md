@@ -63,6 +63,10 @@ TokenTriage is **fully local**:
 - **No prompt bodies are ever persisted.** If an export contains prompt/response bodies, TokenTriage computes SHA-256 hashes and lengths **in memory** and discards the bodies. They never reach disk, cache, the report, or the SQLite export.
 - **No telemetry.** None.
 
+## Performance
+
+Generic JSONL is stream-parsed line by line. The NFR is 1M records in under 60s on a laptop; `npm run bench` (in `core/`) generates a 1M-record file and times the full pipeline — currently ~19s ingest+analyze on a dev container.
+
 ## Supported input formats
 
 Format is auto-detected from the first 50 lines (`tokentriage formats` prints details):

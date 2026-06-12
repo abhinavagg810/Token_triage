@@ -45,8 +45,12 @@ export const cacheMiss: Analyzer = {
       const first = records[0]!;
       const price = ctx.pricing.lookup(first.provider, first.model)!;
       // Stable minimum input across the group ≈ the shared prefix size.
-      const prefixTokens = Math.min(...records.map((r) => r.input_tokens));
-      if (prefixTokens <= 0) continue;
+      // (loop, not Math.min(...spread): groups can exceed the arg-spread limit)
+      let prefixTokens = Infinity;
+      for (const r of records) {
+        if (r.input_tokens < prefixTokens) prefixTokens = r.input_tokens;
+      }
+      if (prefixTokens <= 0 || !Number.isFinite(prefixTokens)) continue;
 
       // Claim prefix tokens on every occurrence after the first; the ledger
       // caps claims at what retry-waste hasn't already taken.

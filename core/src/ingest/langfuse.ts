@@ -15,7 +15,7 @@ export function ingestLangfuse(text: string): { records: CanonicalRecord[]; skip
   const rawRows: Record<string, unknown>[] = [];
   if (firstChar === "[") {
     try {
-      rawRows.push(...(JSON.parse(text) as Record<string, unknown>[]));
+      for (const row of JSON.parse(text) as Record<string, unknown>[]) rawRows.push(row);
     } catch {
       /* ignore */
     }
@@ -31,7 +31,7 @@ export function ingestLangfuse(text: string): { records: CanonicalRecord[]; skip
       }
     }
   } else {
-    rawRows.push(...parseCsv(text).rows);
+    for (const row of parseCsv(text).rows) rawRows.push(row);
   }
 
   let index = 0;

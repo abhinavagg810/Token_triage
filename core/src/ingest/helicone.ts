@@ -17,7 +17,7 @@ export function ingestHelicone(text: string): { records: CanonicalRecord[]; skip
   if (firstChar === "{" || firstChar === "[") {
     if (firstChar === "[") {
       try {
-        rawRows.push(...(JSON.parse(text) as Record<string, unknown>[]));
+        for (const row of JSON.parse(text) as Record<string, unknown>[]) rawRows.push(row);
       } catch {
         /* fall through to JSONL */
       }
@@ -35,7 +35,7 @@ export function ingestHelicone(text: string): { records: CanonicalRecord[]; skip
       }
     }
   } else {
-    rawRows.push(...parseCsv(text).rows);
+    for (const row of parseCsv(text).rows) rawRows.push(row);
   }
 
   let index = 0;

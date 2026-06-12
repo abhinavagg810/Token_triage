@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from langchain.agents import create_agent
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from .llm import get_model
 from .tools import make_tools
@@ -27,6 +27,14 @@ audited period.
 5. All figures are estimates from a local audit; label projected savings as \
 estimates."""
 
+# Static block marked for Anthropic prompt caching — repeat questions in a
+# session re-read the system prompt at 10% of input price.
+CACHED_SYSTEM = SystemMessage(
+    content=[
+        {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
+    ]
+)
+
 
 def ask(
     question: str,
@@ -37,7 +45,7 @@ def ask(
     """Answer one question grounded in the SQLite export. Returns (answer, usage)."""
     llm = model or get_model()
     tools = make_tools(db_path)
-    agent = create_agent(llm, tools, system_prompt=SYSTEM_PROMPT)
+    agent = create_agent(llm, tools, system_prompt=CACHED_SYSTEM)
 
     result = agent.invoke({"messages": [HumanMessage(question)]})
     messages = result["messages"]

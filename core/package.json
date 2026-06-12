@@ -23,6 +23,7 @@
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "generate-sample": "tsx scripts/generate-sample.ts",
+    "bench": "tsx scripts/bench.ts",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [

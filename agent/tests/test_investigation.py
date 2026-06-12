@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -80,3 +81,28 @@ def test_investigation_live(fixture_db: str) -> None:
     lowered = final["report"].lower()
     assert "retry" in lowered or "duplicate" in lowered
     assert usage.llm_calls >= 3
+
+
+def test_checkpoints_persist_and_are_resumable(fixture_db: str, tmp_path: Path) -> None:
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    ckpt = str(tmp_path / "checkpoints.sqlite")
+    model = script(
+        AIMessage("Retry storm hypothesis."),
+        AIMessage("No tools needed; the findings table already pins day 12."),
+        AIMessage("SUPPORTED"),
+        AIMessage("## Incident\nRetry storm on 2026-05-12."),
+    )
+    config = {"configurable": {"thread_id": "investigate-2026-05-12"}}
+    with SqliteSaver.from_conn_string(ckpt) as saver:
+        graph = build_graph(fixture_db, model).compile(checkpointer=saver)
+        final = graph.invoke({"date": "2026-05-12", "retries": 0}, config=config)
+        assert graph.get_state(config).values["report"] == final["report"]
+    assert Path(ckpt).exists()
+
+    # Reopen the checkpoint store (as a new process would): state survives.
+    with SqliteSaver.from_conn_string(ckpt) as saver:
+        graph = build_graph(fixture_db, script()).compile(checkpointer=saver)
+        state = graph.get_state(config)
+        assert state.values["verdict"] == "supported"
+        assert "Retry storm" in state.values["report"]

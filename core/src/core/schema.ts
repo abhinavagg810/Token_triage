@@ -109,6 +109,68 @@ export const canonicalInputSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
 });
 
+/** Number or numeric string (same semantics as the zod `numeric` type, fast). */
+function asNum(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * Hot-path validation: equivalent to canonicalInputSchema for VALID records,
+ * but ~10× cheaper per record (the 1M-records-in-60s NFR lives here).
+ * Returns null when anything is off; the caller then re-runs zod to get a
+ * precise missing-field diagnosis for W-201.
+ */
+function fastParse(raw: Record<string, unknown>): z.infer<typeof canonicalInputSchema> | null {
+  if (typeof raw.model !== "string" || raw.model === "") return null;
+  const input = asNum(raw.input_tokens);
+  const output = asNum(raw.output_tokens);
+  if (input === null || output === null) return null;
+  const tsOk =
+    (typeof raw.timestamp === "string" && raw.timestamp !== "") || typeof raw.timestamp === "number";
+  if (!tsOk) return null;
+  if (raw.id !== undefined && typeof raw.id !== "string") return null;
+  if (raw.provider !== undefined && typeof raw.provider !== "string") return null;
+  const optNum = (v: unknown): number | undefined | null =>
+    v === undefined ? undefined : asNum(v);
+  const cacheRead = optNum(raw.cache_read_tokens);
+  const cacheWrite = optNum(raw.cache_write_tokens);
+  const status = optNum(raw.status);
+  const latency = optNum(raw.latency_ms);
+  if (cacheRead === null || cacheWrite === null || status === null || latency === null) return null;
+  const optStr = (v: unknown): string | null | undefined | false =>
+    v === undefined || v === null ? null : typeof v === "string" ? (v === "" ? null : v) : false;
+  const sessionId = optStr(raw.session_id);
+  const sysHash = optStr(raw.system_prompt_hash);
+  const fullHash = optStr(raw.full_prompt_hash);
+  if (sessionId === false || sysHash === false || fullHash === false) return null;
+  if (raw.max_tokens_set !== undefined && typeof raw.max_tokens_set !== "boolean") return null;
+  if (raw.metadata !== undefined && (typeof raw.metadata !== "object" || raw.metadata === null || Array.isArray(raw.metadata)))
+    return null;
+
+  return {
+    model: raw.model,
+    input_tokens: input,
+    output_tokens: output,
+    timestamp: raw.timestamp as string | number,
+    id: raw.id as string | undefined,
+    provider: raw.provider as string | undefined,
+    cache_read_tokens: cacheRead,
+    cache_write_tokens: cacheWrite,
+    status,
+    latency_ms: latency,
+    session_id: sessionId ?? null,
+    system_prompt_hash: sysHash ?? null,
+    full_prompt_hash: fullHash ?? null,
+    max_tokens_set: raw.max_tokens_set as boolean | undefined,
+    metadata: raw.metadata as Record<string, unknown> | undefined,
+  };
+}
+
 /**
  * Map a raw object that already follows (or approximates) the canonical
  * schema into a CanonicalRecord. Returns the missing/invalid required field
@@ -118,12 +180,16 @@ export function toCanonical(
   raw: Record<string, unknown>,
   index: number
 ): { record: CanonicalRecord } | { missingField: string } {
-  const parsed = canonicalInputSchema.safeParse(raw);
-  if (!parsed.success) {
-    const field = parsed.error.issues[0]?.path[0];
-    return { missingField: typeof field === "string" ? field : "(invalid record)" };
+  let v = fastParse(raw);
+  if (!v) {
+    // Slow path only for invalid records: zod produces the precise diagnosis.
+    const parsed = canonicalInputSchema.safeParse(raw);
+    if (!parsed.success) {
+      const field = parsed.error.issues[0]?.path[0];
+      return { missingField: typeof field === "string" ? field : "(invalid record)" };
+    }
+    v = parsed.data;
   }
-  const v = parsed.data;
   const { iso, ts } = parseTimestamp(v.timestamp);
 
   return {

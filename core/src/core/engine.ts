@@ -77,7 +77,10 @@ export function analyze(
   // Optional --period filter: most recent N days relative to the newest record.
   let working = records;
   if (options.periodDays && options.periodDays > 0) {
-    const maxTs = Math.max(...records.map((r) => (Number.isNaN(r.ts) ? -Infinity : r.ts)));
+    let maxTs = -Infinity;
+    for (const r of records) {
+      if (!Number.isNaN(r.ts) && r.ts > maxTs) maxTs = r.ts;
+    }
     if (Number.isFinite(maxTs)) {
       const cutoff = maxTs - options.periodDays * 86_400_000;
       working = records.filter((r) => Number.isNaN(r.ts) || r.ts >= cutoff);
@@ -125,9 +128,14 @@ export function analyze(
     byModel.set(modelKey, entry);
   }
 
-  const validTs = working.map((r) => r.ts).filter((t) => !Number.isNaN(t));
-  const minTs = validTs.length ? Math.min(...validTs) : NaN;
-  const maxTs = validTs.length ? Math.max(...validTs) : NaN;
+  // Loops, not Math.min(...spread): spreads overflow the stack on 1M records.
+  let minTs = NaN;
+  let maxTs = NaN;
+  for (const r of working) {
+    if (Number.isNaN(r.ts)) continue;
+    if (Number.isNaN(minTs) || r.ts < minTs) minTs = r.ts;
+    if (Number.isNaN(maxTs) || r.ts > maxTs) maxTs = r.ts;
+  }
   const daysInDataset = Number.isNaN(minTs)
     ? 30
     : Math.max(1, Math.ceil((maxTs - minTs) / 86_400_000));

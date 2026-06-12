@@ -24,10 +24,20 @@ from .usage import UsageTracker
 MAX_TOOL_CALLS_PER_INVESTIGATION = 6
 MAX_HYPOTHESIS_RETRIES = 2
 
+# Static block marked for Anthropic prompt caching (the investigation graph
+# re-sends it on every node's LLM call).
 SYSTEM = SystemMessage(
-    """You are TokenTriage's incident investigator for LLM API spend. You work \
-from a local audit database (token counts, hashes, costs — never prompt \
-content). Be precise, cite concrete numbers, and never invent data."""
+    content=[
+        {
+            "type": "text",
+            "text": (
+                "You are TokenTriage's incident investigator for LLM API spend. You work "
+                "from a local audit database (token counts, hashes, costs — never prompt "
+                "content). Be precise, cite concrete numbers, and never invent data."
+            ),
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
 )
 
 
