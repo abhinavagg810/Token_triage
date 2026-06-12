@@ -187,6 +187,7 @@ program
         dbPath: path.resolve(flags.db),
         intervalMs: Math.max(2, Number(flags.interval) || 15) * 1000,
         onAnalyzed: (summary) => console.error(`[analyzed] ${summary}`),
+        onError: (message) => console.error(`[analyze error] ${message} — retrying shortly`),
       });
     } catch (err) {
       console.error((err as Error).message);

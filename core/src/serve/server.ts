@@ -1,4 +1,5 @@
 import http from "node:http";
+import fs from "node:fs";
 import { renderDashboard } from "./dashboard.js";
 
 /**
@@ -7,6 +8,12 @@ import { renderDashboard } from "./dashboard.js";
  * binds to 127.0.0.1 by default, read-only database access, zero external
  * dependencies (node:http + node:sqlite), and nothing in the database can
  * contain prompt bodies in the first place.
+ *
+ * The database is opened PER REQUEST and closed immediately after. That keeps
+ * the file unlocked between requests, which matters on Windows: re-exports
+ * (`analyze --db`, watch mode) replace the file with an atomic rename, and
+ * Windows refuses to rename over a file another process holds open. Opening a
+ * small SQLite file is sub-millisecond — negligible for a local dashboard.
  */
 export interface ServeOptions {
   dbPath: string;
@@ -34,45 +41,28 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
     throw new Error("`tokentriage serve` requires Node.js >= 22.5 (uses the built-in node:sqlite module).");
   }
 
-  const fsMod = await import("node:fs");
-  const fileStamp = (): string => {
-    const st = fsMod.statSync(options.dbPath);
-    return `${st.ino}:${st.mtimeMs}:${st.size}`;
-  };
+  const openDb = (): NodeSqliteDb => new DatabaseSync(options.dbPath, { readOnly: true });
 
-  let db = new DatabaseSync(options.dbPath, { readOnly: true });
-  let stamp = fileStamp();
-
-  // Hot reload: `analyze --db` and watch mode atomically swap the file
-  // (write-temp-then-rename), so a changed inode/mtime means a fresh export —
-  // reopen so the dashboard always serves the latest analysis.
-  const currentDb = (): NodeSqliteDb => {
-    try {
-      const next = fileStamp();
-      if (next !== stamp) {
-        try {
-          db.close();
-        } catch {
-          /* ignore */
-        }
-        db = new DatabaseSync(options.dbPath, { readOnly: true });
-        stamp = next;
-      }
-    } catch {
-      /* stat failed mid-swap — keep serving the open handle */
+  // Fail fast on a non-TokenTriage database (open, check, close).
+  {
+    if (!fs.existsSync(options.dbPath)) {
+      throw new Error(
+        `Database not found: ${options.dbPath}. Create one with: tokentriage analyze <logs> --db ${options.dbPath}`
+      );
     }
-    return db;
-  };
-
-  // Fail fast on a non-TokenTriage database.
-  const schema = db.prepare("SELECT value FROM meta WHERE key='schema_version'").get() as
-    | { value: string }
-    | undefined;
-  if (!schema || schema.value !== "1") {
-    db.close();
-    throw new Error(
-      `${options.dbPath} is not a TokenTriage export (expected meta.schema_version = 1). Create one with: tokentriage analyze <logs> --db ${options.dbPath}`
-    );
+    const db = openDb();
+    try {
+      const schema = db.prepare("SELECT value FROM meta WHERE key='schema_version'").get() as
+        | { value: string }
+        | undefined;
+      if (!schema || schema.value !== "1") {
+        throw new Error(
+          `${options.dbPath} is not a TokenTriage export (expected meta.schema_version = 1). Create one with: tokentriage analyze <logs> --db ${options.dbPath}`
+        );
+      }
+    } finally {
+      db.close();
+    }
   }
 
   /** Build a WHERE clause from optional date/model/service filters — params only, never interpolation. */
@@ -107,8 +97,8 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
 
   const day = "substr(timestamp,1,10)";
 
-  const routes: Record<string, (query: URLSearchParams) => unknown> = {
-    "/api/meta": () => {
+  const routes: Record<string, (db: NodeSqliteDb, query: URLSearchParams) => unknown> = {
+    "/api/meta": (db) => {
       const meta = Object.fromEntries(
         (db.prepare("SELECT key, value FROM meta").all() as { key: string; value: string }[]).map(
           (r) => [r.key, r.value]
@@ -125,7 +115,7 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
       return { meta, counts };
     },
 
-    "/api/findings": () => {
+    "/api/findings": (db) => {
       const rows = db
         .prepare(
           `SELECT analyzer_id, name, wasted_usd, pct_of_total, confidence, upper_bound,
@@ -144,14 +134,14 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
       }));
     },
 
-    "/api/daily": (query) => {
+    "/api/daily": (db, query) => {
       const { where, params } = filters(query, "date");
       return db
         .prepare(`SELECT date, usd, requests FROM daily_spend ${where} ORDER BY date`)
         .all(...params);
     },
 
-    "/api/models": (query) => {
+    "/api/models": (db, query) => {
       const { where, params } = filters(query, day);
       return db
         .prepare(
@@ -163,7 +153,7 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
         .all(...params);
     },
 
-    "/api/services": (query) => {
+    "/api/services": (db, query) => {
       const { where, params } = filters(query, day);
       return db
         .prepare(
@@ -175,7 +165,7 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
         .all(...params);
     },
 
-    "/api/sessions": (query) => {
+    "/api/sessions": (db, query) => {
       const limit = Math.min(Number(query.get("limit") ?? 25) || 25, MAX_PAGE_SIZE);
       const order =
         {
@@ -192,7 +182,7 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
         .all(limit);
     },
 
-    "/api/requests": (query) => {
+    "/api/requests": (db, query) => {
       const { where, params } = filters(query, day);
       const limit = Math.min(Number(query.get("limit") ?? 50) || 50, MAX_PAGE_SIZE);
       const offset = Math.max(Number(query.get("offset") ?? 0) || 0, 0);
@@ -209,7 +199,7 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
       return { total: total.n, offset, limit, rows };
     },
 
-    "/api/agent_runs": () => {
+    "/api/agent_runs": (db) => {
       return db
         .prepare(
           `SELECT id, started_at, kind, model, question, input_tokens, output_tokens,
@@ -234,8 +224,15 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
         res.end(JSON.stringify({ error: "not found" }));
         return;
       }
-      currentDb(); // reopen `db` if the export was swapped since the last request
-      const payload = handler(url.searchParams);
+      // Open per request, close immediately — keeps the file unlocked so
+      // re-exports can swap it (required on Windows).
+      const db = openDb();
+      let payload: unknown;
+      try {
+        payload = handler(db, url.searchParams);
+      } finally {
+        db.close();
+      }
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(payload));
     } catch (err) {
@@ -244,7 +241,6 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
     }
   });
 
-  server.on("close", () => db.close());
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(options.port, options.host, resolve);

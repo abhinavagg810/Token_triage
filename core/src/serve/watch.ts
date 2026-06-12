@@ -29,6 +29,8 @@ export interface WatchOptions {
   openaiUpstream?: string;
   /** Called after each re-analysis with a one-line summary (logging hook). */
   onAnalyzed?: (summary: string) => void;
+  /** Called when a re-analysis cycle fails (it will retry next tick). */
+  onError?: (message: string) => void;
 }
 
 export interface WatchHandle {
@@ -84,8 +86,9 @@ export async function startWatch(options: WatchOptions): Promise<WatchHandle> {
           `waste $${result.addressableWaste.toFixed(2)}` +
           (top ? ` · top: ${top.analyzer_name} ($${top.wasted_usd.toFixed(2)})` : "")
       );
-    } catch {
-      // capture file may be empty or mid-write — try again next tick
+    } catch (err) {
+      // capture file may be empty or mid-write — report and try again next tick
+      options.onError?.((err as Error).message);
       dirty = true;
     } finally {
       analyzing = false;

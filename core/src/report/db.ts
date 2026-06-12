@@ -195,7 +195,22 @@ export async function exportDb(
     db.exec("COMMIT");
 
     db.close();
-    fs.renameSync(tmpPath, dbPath); // atomic swap
+    // Atomic swap. On Windows the rename fails while a reader briefly holds
+    // the destination open (the dashboard opens per-request), so retry for a
+    // moment before giving up.
+    let lastErr: unknown;
+    let renamed = false;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        fs.renameSync(tmpPath, dbPath);
+        renamed = true;
+        break;
+      } catch (err) {
+        lastErr = err;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+    if (!renamed) throw lastErr;
 
     return {
       requests: result.records.length,
