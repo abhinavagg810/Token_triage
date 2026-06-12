@@ -207,3 +207,34 @@ describe("extractUsage", () => {
 function base(): string {
   return proxyBase;
 }
+
+describe("test-traffic helper", () => {
+  it("sends N requests through the proxy and they are captured with the test-traffic service tag", async () => {
+    const { sendTestTraffic } = await import("../src/proxy/test-traffic.js");
+    const { ok, failed } = await sendTestTraffic({
+      proxyUrl: base(),
+      apiKey: "sk-ant-fake",
+      requests: 3,
+      model: "claude-haiku-4-5",
+    });
+    expect(ok).toBe(3);
+    expect(failed).toBe(0);
+    const records = await captured();
+    const tagged = records.filter(
+      (r) => (r.metadata as { service?: string })?.service === "test-traffic"
+    );
+    expect(tagged.length).toBe(3);
+  });
+
+  it("fails fast with a clear count when the proxy is not running", async () => {
+    const { sendTestTraffic } = await import("../src/proxy/test-traffic.js");
+    const { ok, failed } = await sendTestTraffic({
+      proxyUrl: "http://127.0.0.1:1", // nothing listens here
+      apiKey: "sk-ant-fake",
+      requests: 5,
+      model: "claude-haiku-4-5",
+    });
+    expect(ok).toBe(0);
+    expect(failed).toBe(1); // stops on first connection failure instead of retrying 5x
+  });
+});

@@ -123,6 +123,47 @@ program
   });
 
 program
+  .command("test-traffic")
+  .description("Send a few tiny real Claude requests through the local proxy so the watch dashboard lights up (costs under one cent)")
+  .option("--proxy <url>", "the running watch/proxy address", "http://127.0.0.1:8484")
+  .option("--requests <n>", "how many requests to send", "12")
+  .option("--model <model>", "model to use (Haiku keeps it nearly free)", "claude-haiku-4-5")
+  .option("--key <key>", "Anthropic API key (defaults to the ANTHROPIC_API_KEY environment variable)")
+  .action(async (flags: { proxy: string; requests: string; model: string; key?: string }) => {
+    const apiKey = flags.key ?? process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error("No API key found. Either:");
+      console.error('  1. set it for this window first:   $env:ANTHROPIC_API_KEY = "sk-ant-..."   (PowerShell)');
+      console.error("                                      export ANTHROPIC_API_KEY=sk-ant-...    (Mac/Linux)");
+      console.error("  2. or pass it directly:             tokentriage test-traffic --key sk-ant-...");
+      console.error("Get a key at https://console.anthropic.com → API keys.");
+      process.exitCode = 1;
+      return;
+    }
+    const { sendTestTraffic } = await import("./proxy/test-traffic.js");
+    console.log(`Sending ${flags.requests} small requests through ${flags.proxy} using ${flags.model}...`);
+    const { ok, failed } = await sendTestTraffic({
+      proxyUrl: flags.proxy,
+      apiKey,
+      requests: Math.max(1, Number(flags.requests) || 12),
+      model: flags.model,
+      log: (line) => console.log(line),
+    });
+    console.log("");
+    if (ok > 0) {
+      console.log(`Done: ${ok} request(s) went through to Anthropic and were captured.`);
+      console.log("Within ~15 seconds the watch window will print [analyzed] and the");
+      console.log("dashboard (http://127.0.0.1:4117) will refresh itself with the findings.");
+    }
+    if (failed > 0 && ok === 0) {
+      console.error("Nothing got through. Checklist:");
+      console.error("  - Is `tokentriage watch` running in the other window?");
+      console.error("  - Is the key valid? (it should start with sk-ant-)");
+      process.exitCode = 1;
+    }
+  });
+
+program
   .command("watch")
   .description("One-command live mode: capture proxy + dashboard + automatic re-analysis. Connect your SDK and watch findings update. Node 22.5+")
   .option("--proxy-port <port>", "capture proxy port", "8484")
