@@ -6,14 +6,15 @@ TokenTriage is an open-source CLI that explains **why** your LLM API bill is hig
 
 ```
 TokenTriage — analyzed 10,133 requests · 1 May – 30 May 2026 (30 days)
-Total spend: $919.70        Addressable waste found: $443.39 (48.2%)
+Total spend: $919.70        Addressable waste found: $475.42 (51.7%)
 
- #   Cause                              Waste   % of spend   Monthly savings   Confidence
- 1   Prompt caching not used          $257.92        28.0%           $258/mo         High
- 2   Context bloat (agents)            $93.46        10.2%            $93/mo         High
- 3   Retry/duplicate calls             $41.88         4.6%            $42/mo         High
- 4   Model overkill                    $31.05         3.4%      up to $31/mo       Medium
- 5   Verbose output (no max_tokens)    $19.08         2.1%            $19/mo          Low
+ #   Cause                                          Waste   % of spend   Monthly savings   Confidence
+ 1   Prompt caching not used                      $261.00        28.4%           $261/mo         High
+ 2   Context bloat (agents)                        $93.46        10.2%            $93/mo         High
+ 3   Retry/duplicate calls                         $41.88         4.6%            $42/mo         High
+ 4   Model overkill                                $31.05         3.4%      up to $31/mo       Medium
+ 5   Dead-weight prompt (uncached static block)    $28.95         3.1%            $29/mo          Low
+ 6   Verbose output (no max_tokens)                $19.08         2.1%            $19/mo          Low
 
 Report written: ./tokentriage-report.html
 ```
