@@ -123,6 +123,32 @@ program
   });
 
 program
+  .command("serve")
+  .description("Serve a local web dashboard over a SQLite export (tokentriage analyze --db). Local only; requires Node 22.5+")
+  .option("--db <path>", "SQLite export to serve", "tokentriage.db")
+  .option("--port <port>", "port to listen on", "4117")
+  .option("--host <host>", "host to bind (keep it local)", "127.0.0.1")
+  .action(async (flags: { db: string; port: string; host: string }) => {
+    if (!fs.existsSync(flags.db)) {
+      console.error(
+        `Database not found: ${flags.db}. Export one first: tokentriage analyze <logs> --db ${flags.db} (or tokentriage demo --db ${flags.db})`
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const { startServer } = await import("./serve/server.js");
+    try {
+      await startServer({ dbPath: path.resolve(flags.db), port: Number(flags.port), host: flags.host });
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`TokenTriage dashboard: http://${flags.host}:${flags.port}`);
+    console.log("Local only — reads the database read-only; Ctrl-C to stop.");
+  });
+
+program
   .command("formats")
   .description("Print supported input formats and the canonical record schema")
   .action(() => {

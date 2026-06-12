@@ -56,6 +56,17 @@ python -m agent.cli --db ../tokentriage.db investigate --date 2026-05-12
 
 `investigate` runs an explicit LangGraph state machine (detect anomaly → hypothesize → gather evidence with capped tool calls → verify → incident report) with resumable SQLite checkpoints. The agent logs its **own** token usage to the `agent_runs` table — TokenTriage audits itself. The database schema is documented in [`docs/db-schema.md`](docs/db-schema.md).
 
+## Explore interactively (local dashboard)
+
+`tokentriage serve` starts a local-only web dashboard over the SQLite export — the queryable counterpart to the static report:
+
+```bash
+tokentriage analyze ./logs.jsonl --db audit.db   # or: tokentriage demo --db audit.db
+tokentriage serve --db audit.db                  # → http://127.0.0.1:4117
+```
+
+Findings with expandable fixes, daily spend, spend by model **and by service** (tag requests with `metadata.service` for per-team attribution), top sessions, a filterable/paginated request explorer, and the agent's own token usage. Binds to 127.0.0.1, reads the database read-only, zero external dependencies — no CDN, no framework, no telemetry. See [docs/usage.md](docs/usage.md) for individual, team, CI, and enterprise workflows.
+
 ## Privacy
 
 TokenTriage is **fully local**:
@@ -124,6 +135,7 @@ A **claimed-token ledger** guarantees no token is counted by two analyzers, so t
 | `tokentriage demo` | Runs on the bundled synthetic 30-day dataset |
 | `tokentriage formats` | Supported input formats + canonical schema |
 | `tokentriage pricing` | Active pricing table + override path |
+| `tokentriage serve [--db audit.db] [--port 4117]` | Local web dashboard over a SQLite export (Node 22.5+) |
 
 `--json` emits machine-readable findings for CI (e.g. fail a pipeline if waste > 30%). `--narrate` adds an LLM-written executive summary to the report using your own key in `TOKENTRIAGE_LLM_KEY` — the only network call in the core tool, off by default. `--db` exports the normalized analysis to SQLite for the agent service ([schema](docs/db-schema.md)).
 
