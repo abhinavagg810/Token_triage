@@ -14,6 +14,30 @@ import { generateNarrative } from "./report/narrative.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** Turn a server-startup error into an actionable, non-technical message. */
+function explainStartupError(err: unknown, ports: { label: string; value: number }[]): string {
+  const code = (err as NodeJS.ErrnoException).code;
+  if (code === "EADDRINUSE") {
+    const lines = [
+      "A port TokenTriage needs is already in use — most likely an earlier",
+      "`tokentriage watch`/`serve`/`proxy` is still running in another window.",
+      "",
+      "Fix it one of two ways:",
+      "  1. Close the other window (or press Ctrl-C in it), then run this again.",
+      "  2. Or stop every stray Node process and retry:",
+      "       Windows (PowerShell):  Get-Process node | Stop-Process -Force",
+      "       Mac/Linux:             pkill -f tokentriage",
+      "",
+      `Or start on different ports, e.g.: --${ports[0]?.label} ${(ports[0]?.value ?? 8484) + 10}`,
+    ];
+    return lines.join("\n");
+  }
+  if (code === "EACCES") {
+    return "Permission denied binding that port. Pick a port above 1024 (the defaults already are), or run with the right permissions.";
+  }
+  return (err as Error).message;
+}
+
 // Optional .env in the current folder (keys never live in the codebase itself).
 loadDotEnv();
 
@@ -190,7 +214,12 @@ program
         onError: (message) => console.error(`[analyze error] ${message} — retrying shortly`),
       });
     } catch (err) {
-      console.error((err as Error).message);
+      console.error(
+        explainStartupError(err, [
+          { label: "proxy-port", value: Number(flags.proxyPort) },
+          { label: "port", value: Number(flags.port) },
+        ])
+      );
       process.exitCode = 1;
       return;
     }
@@ -218,16 +247,22 @@ program
   .action(async (flags: { port: string; host: string; out: string }) => {
     const { startProxy } = await import("./proxy/proxy.js");
     const outPath = path.resolve(flags.out);
-    await startProxy({
-      port: Number(flags.port),
-      host: flags.host,
-      outPath,
-      onCapture: (r) => {
-        console.error(
-          `[capture] ${r.provider}/${r.model} in=${r.input_tokens} out=${r.output_tokens} cached=${r.cache_read_tokens} status=${r.status}`
-        );
-      },
-    });
+    try {
+      await startProxy({
+        port: Number(flags.port),
+        host: flags.host,
+        outPath,
+        onCapture: (r) => {
+          console.error(
+            `[capture] ${r.provider}/${r.model} in=${r.input_tokens} out=${r.output_tokens} cached=${r.cache_read_tokens} status=${r.status}`
+          );
+        },
+      });
+    } catch (err) {
+      console.error(explainStartupError(err, [{ label: "port", value: Number(flags.port) }]));
+      process.exitCode = 1;
+      return;
+    }
     console.log(`TokenTriage capture proxy: http://${flags.host}:${flags.port}`);
     console.log(`Capturing usage metadata (never content) to ${outPath}`);
     console.log("");
@@ -259,7 +294,7 @@ program
     try {
       await startServer({ dbPath: path.resolve(flags.db), port: Number(flags.port), host: flags.host });
     } catch (err) {
-      console.error((err as Error).message);
+      console.error(explainStartupError(err, [{ label: "port", value: Number(flags.port) }]));
       process.exitCode = 1;
       return;
     }
