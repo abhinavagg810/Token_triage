@@ -61,6 +61,13 @@ describe("tokentriage watch (one-command live mode)", () => {
     expect(Number(m.request_count)).toBe(0);
   });
 
+  it("dashboard advertises live capture wiring with the bound proxy port", async () => {
+    const html = await (await fetch(`${dashBase}/`)).text();
+    const proxyPort = (watch.proxy.address() as { port: number }).port;
+    expect(html).toContain('"mode":"watch"');
+    expect(html).toContain(`"proxyPort":${proxyPort}`);
+  });
+
   it("traffic through the proxy is analyzed automatically and findings appear", async () => {
     // 12 calls sharing a system prompt, uncached → cache-miss must fire.
     for (let i = 0; i < 12; i++) {

@@ -65,6 +65,12 @@ describe("tokentriage serve", () => {
     expect(html).toContain("TokenTriage");
     expect(html).not.toMatch(/<script[^>]+src=/);
     expect(html).not.toContain("https://cdn");
+    // redesign: Connect panel + live wordmark, no leaked template interpolations
+    expect(html).toContain("live cost auditor");
+    expect(html).toContain("ANTHROPIC_BASE_URL");
+    expect(html).not.toContain("${");
+    // serve mode advertises a static snapshot in the embedded connect config
+    expect(html).toContain('"mode":"serve"');
   });
 
   it("/api/meta returns totals and counts", async () => {

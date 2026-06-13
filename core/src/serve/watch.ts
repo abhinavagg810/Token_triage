@@ -64,10 +64,13 @@ export async function startWatch(options: WatchOptions): Promise<WatchHandle> {
     },
   });
 
+  // Reflect the actually-bound port (handles --proxy-port 0 / ephemeral).
+  const boundProxyPort = (proxy.address() as { port: number } | null)?.port ?? options.proxyPort;
   const dashboard = await startServer({
     dbPath: options.dbPath,
     port: options.dashboardPort,
     host: options.host,
+    connect: { mode: "watch", host: options.host, proxyPort: boundProxyPort },
   });
 
   async function reanalyze(): Promise<void> {

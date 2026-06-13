@@ -19,6 +19,15 @@ export interface ServeOptions {
   dbPath: string;
   port: number;
   host: string;
+  /** When launched by `watch`, describes the live capture proxy for the Connect panel. */
+  connect?: ConnectInfo;
+}
+
+export interface ConnectInfo {
+  /** "watch" shows live-capture wiring; "serve" shows a static-snapshot note. */
+  mode: "watch" | "serve";
+  host?: string;
+  proxyPort?: number;
 }
 
 interface NodeSqliteDb {
@@ -215,7 +224,7 @@ export async function startServer(options: ServeOptions): Promise<http.Server> {
     try {
       if (url.pathname === "/" || url.pathname === "/index.html") {
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        res.end(renderDashboard());
+        res.end(renderDashboard(options.connect ?? { mode: "serve" }));
         return;
       }
       const handler = routes[url.pathname];
